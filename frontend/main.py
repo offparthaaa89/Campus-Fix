@@ -26,23 +26,28 @@ from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex as color
 
 API_BASE = os.getenv("CAMPUSFIX_API_BASE", "http://127.0.0.1:8000").rstrip("/")
-BG = "#F4F5FA"
+BG = "#F5F6F0"
 WHITE = "#FFFFFF"
-INK = "#191B3B"
-MUTED = "#555B76"
-HERO = "#191943"
-PRIMARY = "#4739CC"
-ACCENT = "#DCD5FF"
-LINE = "#E1E3EF"
-PALE = "#ECE9FE"
-NEUTRAL = "#EFF0F7"
-ERROR = "#A22B44"
+INK = "#183B32"
+MUTED = "#65786E"
+HERO = "#153A31"
+PRIMARY = "#173C32"
+ACCENT = "#E0F69B"
+LINE = "#DFE6DC"
+PALE = "#EDF5E1"
+NEUTRAL = "#F0F2EB"
+ERROR = "#B02F45"
 
+# Use one set of meaningful pictograms in the signboard and ticket lists.
 CATEGORY_ICONS = {
-    "Wi-Fi/IT": ("wifi", "#ECE8FF", "#5444C7"),
-    "Classroom": ("classroom", "#E7F0FE", "#295A99"),
-    "Electrical": ("power", "#FFF0D9", "#995721"),
+    "Wi-Fi/IT": ("wifi", "#E5E9FC", INK),
+    "Hostel": ("hostel", "#FBE9D8", INK),
+    "Electrical": ("electrical", "#FFF0C6", INK),
+    "Cleanliness": ("cleanliness", "#DCF2E6", INK),
+    "Classroom": ("classroom", "#F8E1DB", INK),
+    "Other": ("other", "#E8ECE9", INK),
 }
+
 STATUS_COLORS = {
     "Open": ("#EDF1F7", "#38506B"),
     "In Progress": ("#F9ECD1", "#735018"),
@@ -229,25 +234,213 @@ def icon_tile(name, fill, ink, side=38):
     return tile
 
 
+class FixlineBrandMark(Widget):
+    """Small, resolution-independent CampusFix logo: routed path + check."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(pos=self.draw, size=self.draw)
+
+    def draw(self, *_):
+        self.canvas.clear()
+        x, y = self.pos
+        w, h = self.size
+        side = min(w, h)
+        x += (w - side) / 2
+        y += (h - side) / 2
+
+        def point(a, b):
+            return (x + side * a, y + side * b)
+
+        with self.canvas:
+            Color(*color(ACCENT))
+            RoundedRectangle(pos=(x, y), size=(side, side), radius=[side * .24])
+            Color(*color(HERO))
+            # A single routed line suggests campus wayfinding and progress.
+            Line(points=[*point(.70, .75), *point(.40, .75),
+                         *point(.28, .63), *point(.28, .34), *point(.49, .34)],
+                 width=max(dp(2.4), side * .078), cap='round', joint='round')
+            Ellipse(pos=(x + side * .65, y + side * .70),
+                    size=(side * .10, side * .10))
+            # The check is the visual promise of CampusFix: resolved.
+            Line(points=[*point(.50, .43), *point(.62, .31), *point(.83, .58)],
+                 width=max(dp(2.6), side * .085), cap='round', joint='round')
+
+
+class FixlineGlyph(Widget):
+    """Draw pictograms as vectors (no emoji/fonts/image assets required)."""
+    def __init__(self, kind, color=INK, **kwargs):
+        super().__init__(**kwargs)
+        self.kind, self.ink = kind, color
+        self.bind(pos=self.draw, size=self.draw)
+
+    def draw(self, *_):
+        self.canvas.clear()
+        x, y = self.pos
+        w, h = self.size
+        s = min(w, h)
+        x += (w - s) / 2
+        y += (h - s) / 2
+
+        def p(a, b):
+            return (x + a * s, y + b * s)
+
+        def path(*coords, width=0.055, close=False):
+            pts = []
+            for a, b in coords:
+                pts.extend(p(a, b))
+            Line(points=pts + (pts[:2] if close else []), width=max(1.3, s * width),
+                 cap='round', joint='round')
+
+        with self.canvas:
+            Color(*color(self.ink))
+            if self.kind == 'wifi':
+                for radius in (0.34, 0.23, 0.12):
+                    Line(circle=(*p(.5, .22), s * radius, 42, 138),
+                         width=max(1.2, s * .055), cap='round')
+                Ellipse(pos=p(.45, .12), size=(s * .1, s * .1))
+            elif self.kind == 'hostel':
+                path((.14,.24),(.14,.73), width=.065)
+                path((.14,.44),(.84,.44),(.84,.24), width=.065)
+                path((.15,.57),(.79,.57),(.84,.49), width=.075)
+                Line(rounded_rectangle=(*p(.24,.59),s*.2,s*.11,s*.03), width=max(1,s*.035))
+            elif self.kind == 'electrical':
+                path((.56,.89),(.25,.48),(.46,.48),(.39,.12),(.78,.60),(.54,.60),(.56,.89), width=.07)
+            elif self.kind == 'cleanliness':
+                path((.42,.82),(.59,.32),width=.055)
+                path((.46,.30),(.77,.39),(.73,.16),(.52,.1),(.46,.30),width=.05)
+                path((.20,.67),(.20,.85),width=.04)
+                path((.11,.76),(.29,.76),width=.04)
+                path((.19,.27),(.19,.42),width=.04)
+                path((.12,.35),(.26,.35),width=.04)
+            elif self.kind == 'classroom':
+                Line(rounded_rectangle=(*p(.14,.39),s*.72,s*.42,s*.055),width=max(1.2,s*.045))
+                path((.48,.38),(.48,.23),(.31,.12),width=.045)
+                path((.48,.23),(.67,.12),width=.045)
+                path((.30,.66),(.70,.66),width=.04)
+                path((.30,.55),(.59,.55),width=.04)
+            elif self.kind == 'other':
+                for px in (.25,.5,.75):
+                    Ellipse(pos=p(px-.07,.43),size=(s*.14,s*.14))
+            elif self.kind == 'route':
+                path((.17,.26),(.39,.26),(.39,.72),(.77,.72),width=.07)
+                Ellipse(pos=p(.10,.19),size=(s*.14,s*.14))
+                Ellipse(pos=p(.68,.63),size=(s*.18,s*.18))
+            elif self.kind == 'check':
+                Line(circle=(*p(.5,.5),s*.37),width=max(1.2,s*.045))
+                path((.30,.50),(.44,.36),(.71,.67),width=.07)
+            elif self.kind == 'wrench':
+                Line(circle=(*p(.68,.70),s*.15,30,285),width=max(1.2,s*.06))
+                path((.58,.58),(.20,.19),width=.09)
+                Ellipse(pos=p(.11,.09),size=(s*.18,s*.18))
+            elif self.kind == 'pin':
+                Line(circle=(*p(.5,.61),s*.26,0,180),width=max(1.2,s*.05))
+                path((.24,.60),(.50,.12),(.76,.60),width=.055)
+                Ellipse(pos=p(.43,.55),size=(s*.14,s*.14))
+            elif self.kind == 'bell':
+                Line(circle=(*p(.5,.50),s*.29,20,160),width=max(1.2,s*.045))
+                path((.22,.60),(.22,.28),(.78,.28),(.78,.60),width=.055)
+                Ellipse(pos=p(.44,.12),size=(s*.12,s*.12))
+            elif self.kind == 'arrow':
+                path((.20,.5),(.79,.5),width=.07)
+                path((.59,.72),(.80,.5),(.59,.28),width=.07)
+            elif self.kind == 'back':
+                path((.79,.5),(.20,.5),width=.07)
+                path((.40,.72),(.19,.5),(.40,.28),width=.07)
+            else:
+                Line(circle=(*p(.5,.5),s*.35),width=max(1.2,s*.06))
+
+
+
+def status_panel(message, glyph="route"):
+    """Consistent, readable empty/loading/error surface across all workspaces.
+
+    The icon supports recognition, while text carries the full meaning.
+    """
+    panel = BoxLayout(
+        orientation="horizontal", size_hint_y=None, height=dp(94),
+        spacing=dp(13), padding=(dp(16), dp(15)),
+    )
+    paint(panel, WHITE, radius=17, stroke=LINE)
+    icon_slot = AnchorLayout(size_hint=(None, 1), width=dp(43))
+    icon_back = AnchorLayout(size_hint=(None, None), size=(dp(43), dp(43)))
+    paint(icon_back, PALE, radius=13)
+    icon_back.add_widget(FixlineGlyph(
+        glyph, color=PRIMARY, size_hint=(None, None), size=(dp(27), dp(27)),
+    ))
+    icon_slot.add_widget(icon_back)
+    panel.add_widget(icon_slot)
+    message_label = words(message, 14, MUTED, min_height=40)
+    panel.add_widget(message_label)
+    message_label.bind(height=lambda _w, h: setattr(
+        panel, "height", max(dp(94), h + dp(30))
+    ))
+    return panel
+
+
 def brand(sign_out=None):
-    bar = BoxLayout(spacing=dp(11), size_hint_y=None, height=dp(46))
-    mark = AnchorLayout(size_hint_x=None, width=dp(44))
-    mark.add_widget(icon_tile("campus", PRIMARY, WHITE, 44))
-    bar.add_widget(mark)
-    name = column(0)
-    name.add_widget(words("CampusFix", 20, bold=True))
-    name.add_widget(words("CAMPUS SERVICES", 10, MUTED, bold=True))
+    """Locked CampusFix identity: route/check symbol plus one compact name."""
+    bar = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(52))
+    logo_slot = AnchorLayout(size_hint_x=None, width=dp(50))
+    logo_slot.add_widget(FixlineBrandMark(size_hint=(None,None), size=(dp(46), dp(46))))
+    bar.add_widget(logo_slot)
     name_slot = AnchorLayout(anchor_x="left")
-    name_slot.add_widget(name)
+    brand_name = Label(text="CampusFix", font_size=sp(23), bold=True,
+                       color=color(INK), halign="left", valign="middle")
+    brand_name.bind(size=lambda label, _: setattr(label, "text_size", label.size))
+    name_slot.add_widget(brand_name)
     bar.add_widget(name_slot)
-    tag = AnchorLayout(anchor_x="right", size_hint_x=None, width=dp(104))
-    if sign_out is None:
-        tag.add_widget(pill("CampusFix", 104, PALE, PRIMARY))
-    else:
-        tag.add_widget(action("Sign out", sign_out, fill=WHITE, ink=PRIMARY, width=94, height=40))
-    bar.add_widget(tag)
+    if sign_out is not None:
+        bar.add_widget(action("Sign out", sign_out, fill=WHITE,
+                              ink=PRIMARY, width=92, height=42))
     return bar
 
+
+FIXLINE_CATEGORIES = (
+    ("Wi-Fi/IT", "wifi", "Internet and devices", "#E5E9FC"),
+    ("Hostel", "hostel", "Rooms and facilities", "#FBE9D8"),
+    ("Electrical", "electrical", "Power, lights and fans", "#FFF0C6"),
+    ("Cleanliness", "cleanliness", "Cleaning and hygiene", "#DCF2E6"),
+    ("Classroom", "classroom", "Learning spaces", "#F8E1DB"),
+    ("Other", "other", "Other campus issues", "#E8ECE9"),
+)
+
+
+class FixlineCategoryTile(ButtonBehavior, BoxLayout):
+    """A single large, labelled pictogram. No icon-only ambiguity."""
+    def __init__(self, label, icon_name, subtitle, fill, on_pick, **kwargs):
+        super().__init__(orientation="vertical", padding=dp(13),
+                         spacing=dp(7), **kwargs)
+        shade = paint(self, fill, radius=18)
+        self.bind(on_release=lambda _tile: on_pick(label))
+        def press(_tile, state):
+            shade.a = 0.72 if state == "down" else 1.0
+        self.bind(state=press)
+        header = BoxLayout(size_hint_y=None, height=dp(45))
+        header.add_widget(FixlineGlyph(icon_name, size_hint_x=None, width=dp(45)))
+        header.add_widget(Widget())
+        arrow = FixlineGlyph("arrow", color="#5E7B6D", size_hint_x=None, width=dp(22))
+        header.add_widget(arrow)
+        self.add_widget(header)
+        self.add_widget(words(label, 17, INK, bold=True, min_height=26))
+        self.add_widget(words(subtitle, 12, MUTED, min_height=24))
+
+
+def fixline_categories_grid(open_by_category):
+    grid = GridLayout(cols=2, spacing=dp(11), size_hint_y=None,
+                      row_default_height=dp(135), row_force_default=True)
+    for category in FIXLINE_CATEGORIES:
+        grid.add_widget(FixlineCategoryTile(*category, on_pick=open_by_category))
+
+    def adapt(*_):
+        cols = 3 if grid.width >= dp(760) else 2
+        if grid.cols != cols:
+            grid.cols = cols
+        count = len(FIXLINE_CATEGORIES)
+        rows = (count + cols - 1) // cols
+        grid.height = dp(rows * 135 + (rows-1) * 11)
+    grid.bind(width=adapt)
+    adapt()
+    return grid
 
 def campus_map(hero):
     """A small campus illustration in the report card's spare desktop space."""
@@ -350,30 +543,44 @@ class NotificationBell(ButtonBehavior, BoxLayout):
 
 
 class Dashboard(Screen):
+    """Fixline student signboard + existing live complaints/notifications."""
     def __init__(self, open_form, sign_out, load_complaints, open_detail, open_all,
                  open_notifications, **kwargs):
         super().__init__(**kwargs)
         self.open_detail = open_detail
-        _, body = page(self, 1000)
+        _, body = page(self, 1020)
         body.add_widget(brand(sign_out))
+
         notification_row = BoxLayout(size_hint_y=None, height=dp(46))
         notification_row.add_widget(Widget())
         self.bell = NotificationBell(open_notifications)
         notification_row.add_widget(self.bell)
         body.add_widget(notification_row)
-        body.add_widget(self.report_card(open_form))
+        body.add_widget(self.report_card())
 
-        self.notice = words("", 14, "#1C6243", bold=True)
+        sign_section = column(11)
+        heading = BoxLayout(size_hint_y=None, height=dp(38))
+        title = AnchorLayout(anchor_x="left")
+        title.add_widget(words("What needs fixing?", 24, bold=True))
+        heading.add_widget(title)
+        right = AnchorLayout(anchor_x="right", size_hint_x=None, width=dp(95))
+        right.add_widget(words("TAP A SIGN", 11, MUTED, bold=True))
+        heading.add_widget(right)
+        sign_section.add_widget(heading)
+        sign_section.add_widget(fixline_categories_grid(lambda name: open_form(None, name)))
+        body.add_widget(sign_section)
+
+        self.notice = words("", 14, "#22694A", bold=True)
         self.body = body
 
         recent = column(10)
-        section = BoxLayout(size_hint_y=None, height=dp(34), spacing=dp(8))
+        section = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(8))
         title = AnchorLayout(anchor_x="left")
-        title.add_widget(words("Recent complaints", 22, bold=True))
+        title.add_widget(words("Follow your fixes", 23, bold=True))
         section.add_widget(title)
-        section.add_widget(action("View all", open_all, fill=WHITE, ink=PRIMARY, height=34, width=88))
+        section.add_widget(action("View all", open_all, fill=WHITE,
+                                  ink=PRIMARY, height=34, width=96))
         recent.add_widget(section)
-
         self.tickets = column()
         paint(self.tickets, WHITE, radius=18, stroke=LINE)
         self.tickets.padding = (dp(13), dp(3))
@@ -396,7 +603,7 @@ class Dashboard(Screen):
 
     def show_complaints(self, rows):
         if not rows:
-            self.show_message("No complaints yet. Use New Complaint to report an issue.")
+            self.show_message("No requests yet. Tap an issue sign to report one.")
             return
         self.tickets.clear_widgets()
         for i, item in enumerate(rows):
@@ -405,7 +612,7 @@ class Dashboard(Screen):
                 paint(separator, LINE, radius=0)
                 self.tickets.add_widget(separator)
             category = item["category_name"]
-            icon, fill, ink = CATEGORY_ICONS.get(category, ("campus", PALE, PRIMARY))
+            icon, fill, ink = CATEGORY_ICONS.get(category, ("other", PALE, PRIMARY))
             info = f"#{item['id']}  ·  {category}"
             date = readable_date(item.get("created_at"))
             if date:
@@ -416,32 +623,16 @@ class Dashboard(Screen):
             ))
 
     @staticmethod
-    def report_card(open_form):
-        card = column(17)
-        paint(card, HERO, radius=24)
-        campus_map(card)
-
-        intro = column(6)
-        intro.add_widget(words("STUDENT DASHBOARD", 12, "#C8C3FF", bold=True))
-        intro.add_widget(words("Need something fixed?", 34, WHITE, bold=True))
-        intro.add_widget(words("Report an issue and follow every update in one place.", 15, "#D9DCF7"))
-        cta_slot = AnchorLayout(anchor_x="left", size_hint_y=None, height=dp(51))
-        cta = action("+  New Complaint", open_form, fill=ACCENT, ink=HERO, height=51)
-        cta_slot.add_widget(cta)
-        card.add_widget(intro)
-        card.add_widget(cta_slot)
-
+    def report_card():
+        """Compact introduction; actual status progress stays inside each ticket."""
+        card = column(9)
+        paint(card, HERO, radius=22)
+        card.add_widget(words("THE CAMPUS HELPDESK", 12, ACCENT, bold=True))
+        card.add_widget(words("See it. Report it. Fix it.", 29, WHITE, bold=True))
+        card.add_widget(words("Choose a problem below. We'll help you track the fix.", 14, "#DFEBE0"))
         def adapt(*_):
-            wide = card.width >= dp(660)
-            inset = dp(30 if wide else 20)
-            card.padding = (inset, inset, inset, inset)
-            intro.size_hint_x = None if wide else 1
-            if wide:
-                intro.width = min(dp(475), card.width * .56)
-            cta.size_hint_x = None if wide else 1
-            if wide:
-                cta.width = dp(202)
-
+            pad = dp(23 if card.width >= dp(650) else 17)
+            card.padding = (pad, pad, pad, pad)
         card.bind(width=adapt)
         adapt()
         return card
@@ -453,7 +644,12 @@ class Dashboard(Screen):
         row.bind(on_release=opened)
         row.bind(state=lambda _row, state: setattr(shade, "rgba", color(PALE if state == "down" else WHITE)))
         icon_slot = AnchorLayout(size_hint_x=None, width=dp(38))
-        icon_slot.add_widget(icon_tile(icon, icon_fill, icon_ink))
+        icon_back = AnchorLayout(size_hint=(None, None), size=(dp(38), dp(38)))
+        paint(icon_back, icon_fill, radius=12)
+        icon_back.add_widget(FixlineGlyph(
+            icon, color=icon_ink, size_hint=(None, None), size=(dp(26), dp(26)),
+        ))
+        icon_slot.add_widget(icon_back)
         row.add_widget(icon_slot)
 
         details = column(2)
@@ -513,78 +709,204 @@ def add_field(form, title, widget):
     form.add_widget(group)
 
 
-class MyComplaintsScreen(Screen):
-    """All complaints from the existing /api/complaints/mine endpoint.
 
-    Status filters run locally on records already authorized by the backend.
-    """
-    FILTERS = ("All statuses", "Open", "In Progress", "Resolved", "Reopened")
+# Progress is computed from the current backend status. This is a visual summary;
+# the separately-rendered Status History remains the source of event timestamps.
+FIXLINE_STATUS_TEXT = {
+    "Open": ("Reported", "Your issue has been received. It is waiting to be worked on.", 0),
+    "In Progress": ("Being fixed", "Staff is working on this issue.", 1),
+    "Resolved": ("Marked resolved", "The issue has been marked resolved. You can request another look if needed.", 2),
+    "Reopened": ("Reopened", "Your request to reopen was accepted. The issue is back for review.", 1),
+}
+
+
+class FixlineTrack(Widget):
+    """Resize-safe vector progress with three nodes, grounded in current status."""
+
+    def __init__(self, status, **kwargs):
+        super().__init__(size_hint_y=None, height=dp(49), **kwargs)
+        self.status = status
+        self.bind(pos=self.redraw, size=self.redraw)
+        self.redraw()
+
+    def redraw(self, *_):
+        if self.width < 1 or self.height < 1:
+            return
+        active = FIXLINE_STATUS_TEXT.get(self.status, (None, None, 0))[2]
+        xs = [self.x + self.width/6, self.center_x, self.x + self.width*5/6]
+        y = self.center_y
+        lime = color(ACCENT)
+        faded = color("#5D8171")
+        self.canvas.clear()
+        with self.canvas:
+            Color(*faded)
+            Line(points=(xs[0], y, xs[2], y), width=dp(4.5), cap="round")
+            if active > 0:
+                Color(*lime)
+                Line(points=(xs[0], y, xs[active], y), width=dp(4.5), cap="round")
+            for index, x in enumerate(xs):
+                selected = index <= active
+                Color(*(lime if selected else faded))
+                r = dp(11)
+                Ellipse(pos=(x - r, y - r), size=(2*r, 2*r))
+                Color(*color(HERO))
+                inner = dp(4.2)
+                Ellipse(pos=(x - inner, y - inner), size=(inner*2, inner*2))
+                if index == active:
+                    Color(*color(WHITE))
+                    dot = dp(2.3)
+                    Ellipse(pos=(x - dot, y - dot), size=(dot*2, dot*2))
+
+
+def fixline_progress_card(status, updated_at=None):
+    """At-a-glance journey; neither fabricates assignment nor historic events."""
+    title, explanation, _ = FIXLINE_STATUS_TEXT.get(
+        status, (str(status), "See the history below for recorded changes.", 0)
+    )
+    card = column(12)
+    card.padding = (dp(18), dp(19), dp(18), dp(21))
+    paint(card, HERO, radius=22)
+    card.add_widget(words("YOUR REQUEST JOURNEY", 11, ACCENT, bold=True))
+    card.add_widget(words(title, 25, WHITE, bold=True))
+    card.add_widget(words(explanation, 14, "#DAE9DE"))
+    card.add_widget(FixlineTrack(status))
+    labels = BoxLayout(size_hint_y=None, height=dp(30), spacing=dp(2))
+    middle = "Reopened" if status == "Reopened" else "Working"
+    for index, text in enumerate(("Reported", middle, "Done")):
+        label = Label(text=text, font_size=sp(12), bold=(index == FIXLINE_STATUS_TEXT.get(status, (None,None,0))[2]),
+                      color=color(ACCENT if index == FIXLINE_STATUS_TEXT.get(status, (None,None,0))[2] else "#DBE7DE"),
+                      halign="center", valign="middle")
+        label.bind(size=lambda lbl, _: setattr(lbl, "text_size", lbl.size))
+        labels.add_widget(label)
+    card.add_widget(labels)
+    if updated_at:
+        card.add_widget(words(f"Last updated: {readable_timestamp(updated_at)}", 12, "#CBDBD0"))
+    return card
+
+
+class MyComplaintsScreen(Screen):
+    """A visual, first-time-friendly student list using the existing authorized API."""
+    FILTERS = (
+        ("All", None, 70),
+        ("Open", "Open", 78),
+        ("Working", "In Progress", 103),
+        ("Resolved", "Resolved", 107),
+        ("Reopened", "Reopened", 112),
+    )
 
     def __init__(self, back, reload_list, open_detail, **kwargs):
         super().__init__(**kwargs)
         self.open_detail = open_detail
         self.rows = []
-        self.scroller, body = page(self, 850)
+        self.selected_status = None
+        self.scroller, body = page(self, 920)
         body.add_widget(brand())
-        body.add_widget(action(
-            "Back to dashboard", back, fill=WHITE, ink=PRIMARY, width=160, height=44
-        ))
+        body.add_widget(action("Back to campus", back, fill=WHITE, ink=PRIMARY, width=160, height=43))
 
-        intro = column(5)
-        intro.add_widget(words("STUDENT PORTAL", 11, PRIMARY, bold=True))
-        intro.add_widget(words("My complaints", 32, bold=True))
-        intro.add_widget(words("Track every request you have submitted.", 15, MUTED))
+        intro = column(6)
+        intro.add_widget(words("YOUR REQUESTS", 11, PRIMARY, bold=True))
+        intro.add_widget(words("Follow your fixes", 31, bold=True))
+        intro.add_widget(words("Every report in one place. Tap a request to see its journey.", 14, MUTED))
         body.add_widget(intro)
 
-        controls = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(9))
-        self.filter = Spinner(
-            text=self.FILTERS[0], values=self.FILTERS,
-            option_cls=CategoryOption, font_size=sp(14),
-            color=color(INK), size_hint_x=None, width=dp(170),
-            background_normal="", background_down="", background_color=(0, 0, 0, 0),
-        )
-        paint(self.filter, WHITE, radius=11, stroke=LINE)
-        self.filter.bind(text=lambda *_: self.render_rows())
-        controls.add_widget(self.filter)
-        self.count = Label(
-            text="", font_size=sp(13), color=color(MUTED),
-            halign="right", valign="middle",
-        )
-        self.count.bind(size=lambda label, _: setattr(label, "text_size", label.size))
-        controls.add_widget(self.count)
-        controls.add_widget(action(
-            "Refresh", reload_list, fill=WHITE, ink=PRIMARY, width=85, height=46
-        ))
-        body.add_widget(controls)
+        overview = column(10)
+        overview.padding = (dp(15), dp(14), dp(15), dp(14))
+        paint(overview, WHITE, radius=18, stroke=LINE)
+        overview.add_widget(words("AT A GLANCE", 11, MUTED, bold=True))
+        self.summary_row = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
+        overview.add_widget(self.summary_row)
+        body.add_widget(overview)
 
+        filter_head = BoxLayout(size_hint_y=None, height=dp(34))
+        left = AnchorLayout(anchor_x="left")
+        left.add_widget(words("All your reports", 19, INK, bold=True))
+        filter_head.add_widget(left)
+        filter_head.add_widget(action("Refresh", reload_list, fill=WHITE, ink=PRIMARY, height=34, width=93))
+        body.add_widget(filter_head)
+
+        # A horizontal scroll keeps every filter reachable at phone width.
+        filter_box = column(5)
+        self.filter_hint = words("", 11, MUTED)
+        filter_box.add_widget(self.filter_hint)
+        self.filter_scroll = ScrollView(
+            do_scroll_x=True, do_scroll_y=False, size_hint_y=None, height=dp(47),
+            bar_width=dp(2), scroll_type=["bars", "content"],
+        )
+        self.filter_row = BoxLayout(size_hint_x=None, size_hint_y=None,
+                                    height=dp(44), spacing=dp(7))
+        self.filter_row.width = dp(sum(entry[2] for entry in self.FILTERS) + (len(self.FILTERS)-1)*7)
+        self.filter_scroll.add_widget(self.filter_row)
+        self.filter_scroll.bind(width=lambda _w, width: setattr(
+            self.filter_hint, "text", "Swipe filters sideways to see more"
+            if width < self.filter_row.width else "Filter your requests by status"
+        ))
+        filter_box.add_widget(self.filter_scroll)
+        body.add_widget(filter_box)
+
+        self.result_count = words("", 12, MUTED)
+        body.add_widget(self.result_count)
         self.tickets = column()
         self.tickets.padding = (dp(13), dp(3))
         paint(self.tickets, WHITE, radius=18, stroke=LINE)
         body.add_widget(self.tickets)
-        self.show_message("Loading your complaints...")
+        self.render_filters()
+        self.render_summary()
+        self.show_message("Loading your requests...")
+
+    def render_filters(self):
+        self.filter_row.clear_widgets()
+        for title, status, width in self.FILTERS:
+            active = status == self.selected_status
+            self.filter_row.add_widget(action(
+                title, lambda _button, selected=status: self.pick_filter(selected),
+                fill=PRIMARY if active else WHITE,
+                ink=WHITE if active else INK,
+                height=43, width=width,
+            ))
+
+    def pick_filter(self, status):
+        self.selected_status = status
+        self.render_filters()
+        self.render_rows()
+
+    def render_summary(self):
+        self.summary_row.clear_widgets()
+        counts = (
+            (sum(row.get("status") in ("Open", "Reopened") for row in self.rows), "Waiting", "#EDF1F7"),
+            (sum(row.get("status") == "In Progress" for row in self.rows), "Working", "#FFF0C6"),
+            (sum(row.get("status") == "Resolved" for row in self.rows), "Done", "#DCF2E6"),
+        )
+        for number, label, fill in counts:
+            cell = BoxLayout(orientation="vertical", padding=(dp(8), dp(5)), spacing=dp(2))
+            paint(cell, fill, radius=12)
+            cell.add_widget(Label(text=str(number), color=color(INK), bold=True, font_size=sp(20)))
+            cell.add_widget(Label(text=label, color=color(MUTED), font_size=sp(11)))
+            self.summary_row.add_widget(cell)
 
     def show_message(self, message):
         self.tickets.clear_widgets()
-        self.tickets.add_widget(words(message, 14, MUTED, min_height=62))
+        self.tickets.add_widget(status_panel(message, "route"))
 
     def set_rows(self, rows):
         self.rows = list(rows)
+        self.render_summary()
         self.render_rows()
 
     def clear(self):
         self.rows = []
-        self.filter.text = self.FILTERS[0]
-        self.count.text = ""
-        self.show_message("Sign in to see your complaints.")
+        self.selected_status = None
+        self.render_filters()
+        self.render_summary()
+        self.result_count.text = ""
+        self.show_message("Sign in to see your requests.")
 
     def render_rows(self):
-        selected = self.filter.text
-        visible = [r for r in self.rows if selected == self.FILTERS[0] or r["status"] == selected]
-        self.count.text = f"{len(visible)} of {len(self.rows)}"
+        visible = [r for r in self.rows if self.selected_status is None or r.get("status") == self.selected_status]
+        self.result_count.text = f"Showing {len(visible)} of {len(self.rows)} requests"
         if not visible:
             self.show_message(
-                "No complaints submitted yet." if not self.rows
-                else "No complaints match this status."
+                "Nothing reported yet. Go back and tap an issue sign." if not self.rows
+                else "No requests in this category of progress. Try another filter."
             )
             return
         self.tickets.clear_widgets()
@@ -594,13 +916,13 @@ class MyComplaintsScreen(Screen):
                 paint(divider, LINE, radius=0)
                 self.tickets.add_widget(divider)
             category = item["category_name"]
-            icon, fill, ink = CATEGORY_ICONS.get(category, ("campus", PALE, PRIMARY))
-            label = f"#{item['id']}  ·  {category}"
+            icon, fill, ink = CATEGORY_ICONS.get(category, ("other", PALE, PRIMARY))
+            info = f"#{item['id']}  ·  {category}"
             date = readable_date(item.get("created_at"))
             if date:
-                label += f"  ·  {date}"
+                info += f"  ·  {date}"
             self.tickets.add_widget(Dashboard.ticket_row(
-                item["title"], label, item["status"], icon, fill, ink,
+                item["title"], info, item["status"], icon, fill, ink,
                 lambda _row, ticket_id=item["id"]: self.open_detail(ticket_id),
             ))
 
@@ -639,7 +961,7 @@ class NotificationsScreen(Screen):
 
     def show_message(self, message):
         self.feed.clear_widgets()
-        self.feed.add_widget(words(message, 14, MUTED, min_height=65))
+        self.feed.add_widget(status_panel(message, "bell"))
 
     def show_notifications(self, items):
         self.feed.clear_widgets()
@@ -871,6 +1193,7 @@ class ComplaintForm(Screen):
         self.saving = False
         self.category_ids = {}
         self.selected_category_id = None
+        self.pending_category_name = None
         self.loading = False
         self.scroller, body = page(self, 626)
         self.back_button = action("Back to dashboard", back, fill=WHITE, ink=PRIMARY, width=160, height=44)
@@ -878,7 +1201,7 @@ class ComplaintForm(Screen):
 
         heading = column(4)
         heading.add_widget(words("CAMPUS SERVICE REQUEST", 11, PRIMARY, bold=True))
-        heading.add_widget(words("New complaint", 34, bold=True))
+        heading.add_widget(words("Report an issue", 34, bold=True))
         heading.add_widget(words("Give staff enough detail to find and fix the issue.", 15, MUTED))
         body.add_widget(heading)
 
@@ -917,10 +1240,22 @@ class ComplaintForm(Screen):
         add_field(form, "Location", self.location)
         add_field(form, "Description", self.description)
         self.submit_button = action("Submit complaint", self.submit)
-        self.feedback = words("Your complaint will appear in Recent complaints.", 13, MUTED)
+        self.feedback = words("After submitting, you can track it under My Complaints.", 13, MUTED)
         form.add_widget(self.submit_button)
         form.add_widget(self.feedback)
         body.add_widget(form)
+
+    def prefill_category(self, name):
+        """Apply a signboard choice, even when categories are still loading."""
+        self.pending_category_name = name
+        if name and name in self.category_ids:
+            self.category.text = name
+            self.selected_category_id = self.category_ids[name]
+        elif not name and self.category_ids:
+            self.category.text = "Select a category"
+            self.selected_category_id = None
+        elif name:
+            self.selected_category_id = None
 
     def on_pre_enter(self, *_):
         if not self.category_ids:
@@ -956,6 +1291,9 @@ class ComplaintForm(Screen):
         self.category.values = list(items)
         self.category.disabled = not items
         self.category.text = "Select a category" if items else message
+        if self.pending_category_name and self.pending_category_name in items:
+            self.category.text = self.pending_category_name
+            self.selected_category_id = items[self.pending_category_name]
         if not items and not self.retry.parent:
             self.category_group.add_widget(self.retry)
 
@@ -1001,8 +1339,9 @@ class ComplaintForm(Screen):
         if self.category_ids:
             self.category.text = "Select a category"
         self.selected_category_id = None
+        self.pending_category_name = None
         self.set_saving(False)
-        self.show_feedback("Your complaint will appear in Recent complaints.")
+        self.show_feedback("After submitting, you can track it under My Complaints.")
 
     def finish_submission(self, data, error):
         self.set_saving(False)
@@ -1035,8 +1374,10 @@ class ComplaintDetailScreen(Screen):
         self.reopen_button = None
         self.reopen_notice = None
         self.reopen_status = None
-        self.scroller, body = page(self, 720)
-        body.add_widget(action("Back", back, fill=WHITE, ink=PRIMARY, width=160, height=44))
+        self.scroller, body = page(self, 760)
+        body.add_widget(brand())
+        back_label = "Back to queue" if self.comment_role == "staff" else "Back to fixes"
+        body.add_widget(action(back_label, back, fill=WHITE, ink=PRIMARY, width=160, height=44))
         self.content = column(14)
         body.add_widget(self.content)
 
@@ -1086,6 +1427,9 @@ class ComplaintDetailScreen(Screen):
         heading.add_widget(words(complaint["title"], 31, bold=True))
         heading.add_widget(words(category, 15, MUTED))
         self.content.add_widget(heading)
+
+        # A compact visual explanation before the detailed, real event history.
+        self.content.add_widget(fixline_progress_card(status, complaint.get("updated_at")))
 
         details = column(13)
         details.padding = (dp(17), dp(17))
@@ -1283,7 +1627,7 @@ class ComplaintDetailScreen(Screen):
         timeline = column(13)
         timeline.padding = (dp(17), dp(17))
         paint(timeline, WHITE, radius=20, stroke=LINE)
-        timeline.add_widget(words("Status history", 18, bold=True))
+        timeline.add_widget(words("Recorded status history", 18, bold=True))
 
         if not isinstance(events, list) or not events:
             timeline.add_widget(words(
@@ -1330,48 +1674,74 @@ class ComplaintDetailScreen(Screen):
 
 
 class StaffDashboard(Screen):
-    """Staff's own queue; the backend enforces assignment permissions."""
+    """Fixline Workbench: every visible ticket leads to a clear next action.
+
+    The existing client supplies server-authorized, assigned-only records.
+    """
     FILTERS = ("Unresolved", "All assigned")
 
     def __init__(self, client, **kwargs):
         super().__init__(**kwargs)
         self.client = client
         self.rows = []
-        self.scroller, body = page(self, 900)
+        self.scroller, body = page(self, 950)
         body.add_widget(brand(client.sign_out))
 
+        # The staff hero is short and practical. No decorative fake metrics.
         hero = column(9)
-        hero.padding = (dp(24), dp(24))
-        paint(hero, HERO, radius=24)
-        hero.add_widget(words("STAFF WORKSPACE", 12, "#C8C3FF", bold=True))
-        hero.add_widget(words("Your assigned requests", 30, WHITE, bold=True))
-        hero.add_widget(words("Open a ticket, review its details and move it to the next status.", 15, "#D9DCF7"))
-        body.add_widget(hero)
-        body.add_widget(action(
-            "Review reopen requests", client.open_reopen_review,
-            fill=WHITE, ink=PRIMARY, height=48,
+        hero.padding = (dp(22), dp(21))
+        paint(hero, HERO, radius=23)
+        hero.add_widget(words("STAFF  /  WORKBENCH", 12, ACCENT, bold=True))
+        hero.add_widget(words("Your next fix.", 31, WHITE, bold=True))
+        hero.add_widget(words(
+            "Open an assigned job, update its progress, and keep the student informed.",
+            14, "#D7E6DB",
         ))
+        path_row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(9))
+        for caption in ("Assigned", "Working", "Done"):
+            slot = AnchorLayout(anchor_x="center")
+            slot.add_widget(pill(caption, 90, "#315E4C", "#F4F8E9", 29))
+            path_row.add_widget(slot)
+        hero.add_widget(path_row)
+        body.add_widget(hero)
+
+        shortcuts = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(10))
+        shortcuts.add_widget(action(
+            "Review reopen requests", client.open_reopen_review,
+            fill=ACCENT, ink=PRIMARY, height=54,
+        ))
+        shortcuts.add_widget(action(
+            "Refresh", lambda _btn: self.client.load_staff_queue(),
+            fill=WHITE, ink=PRIMARY, height=54, width=92,
+        ))
+        body.add_widget(shortcuts)
+
+        heading = column(4)
+        heading.add_widget(words("Assigned to you", 24, INK, bold=True))
+        heading.add_widget(words(
+            "Only your assigned requests appear here. Tap a card to open the job.",
+            14, MUTED,
+        ))
+        body.add_widget(heading)
 
         controls = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
         self.filter = Spinner(
             text=self.FILTERS[0], values=self.FILTERS,
             option_cls=CategoryOption, font_size=sp(14),
-            color=color(INK), size_hint_x=None, width=dp(154),
+            color=color(INK), size_hint_x=None, width=dp(155),
             background_normal="", background_down="", background_color=(0, 0, 0, 0),
         )
         paint(self.filter, WHITE, radius=11, stroke=LINE)
         controls.add_widget(self.filter)
-        self.count = Label(text="", font_size=sp(13), color=color(MUTED),
-                           halign="right", valign="middle")
+        self.count = Label(
+            text="", font_size=sp(13), color=color(MUTED),
+            halign="right", valign="middle",
+        )
         self.count.bind(size=lambda item, _: setattr(item, "text_size", item.size))
         controls.add_widget(self.count)
-        controls.add_widget(action("Refresh", lambda _btn: self.client.load_staff_queue(),
-                                   fill=WHITE, ink=PRIMARY, height=46, width=88))
         body.add_widget(controls)
 
-        self.tickets = column()
-        self.tickets.padding = (dp(13), dp(3))
-        paint(self.tickets, WHITE, radius=18, stroke=LINE)
+        self.tickets = column(11)
         body.add_widget(self.tickets)
         self.filter.bind(text=lambda *_: self.client.load_staff_queue())
         self.show_message("Sign in to see your assigned requests.")
@@ -1383,42 +1753,88 @@ class StaffDashboard(Screen):
 
     def show_message(self, message):
         self.tickets.clear_widgets()
-        self.tickets.add_widget(words(message, 14, MUTED, min_height=65))
+        self.tickets.add_widget(status_panel(message, "wrench"))
 
     def show_complaints(self, rows):
         self.rows = list(rows)
-        self.count.text = f"{len(self.rows)} tickets"
+        self.count.text = f"{len(self.rows)} in view"
         if not rows:
-            self.show_message("No assigned requests in this view. Ask an admin to assign a complaint, or try All assigned.")
+            self.show_message(
+                "You're all caught up here. Choose All assigned to see completed jobs, "
+                "or check again after an Admin assigns work."
+            )
             return
+
         self.tickets.clear_widgets()
-        for i, item in enumerate(rows):
-            if i:
-                divider = Widget(size_hint_y=None, height=dp(1))
-                paint(divider, LINE, radius=0)
-                self.tickets.add_widget(divider)
-            category = item["category_name"]
-            icon, fill, ink = CATEGORY_ICONS.get(category, ("campus", PALE, PRIMARY))
-            info = f"#{item['id']}  ·  {category}"
+        palette = {name: (glyph, fill) for name, glyph, _subtitle, fill in FIXLINE_CATEGORIES}
+        for item in rows:
+            # No client-side fake priorities or inferred deadlines.
+            category = str(item.get("category_name") or "Other")
+            glyph, category_fill = palette.get(category, ("other", NEUTRAL))
+            status = str(item.get("status") or "Open")
+            status_fill, status_ink = STATUS_COLORS.get(status, (NEUTRAL, MUTED))
+
+            card = TicketRow(
+                orientation="vertical", size_hint_y=None,
+                padding=(dp(16), dp(14)), spacing=dp(8),
+            )
+            card.bind(minimum_height=card.setter("height"))
+            shade = paint(card, WHITE, radius=19, stroke=LINE)
+            card.bind(
+                state=lambda _widget, state, layer=shade: setattr(
+                    layer, "rgba", color(PALE if state == "down" else WHITE)
+                ),
+                on_release=lambda _widget, ticket_id=item["id"]:
+                    self.client.open_staff_detail(ticket_id),
+            )
+
+            headline = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(11))
+            mark = AnchorLayout(size_hint_x=None, width=dp(44))
+            pictogram = FixlineGlyph(glyph, color=PRIMARY,
+                                    size_hint=(None, None), size=(dp(25), dp(25)))
+            glyph_bg = AnchorLayout(size_hint=(None, None), size=(dp(43), dp(43)))
+            paint(glyph_bg, category_fill, radius=12)
+            glyph_bg.add_widget(pictogram)
+            mark.add_widget(glyph_bg)
+            headline.add_widget(mark)
+            info = column(2)
+            info.add_widget(words(f"TICKET #{item['id']}", 11, MUTED, bold=True))
+            info.add_widget(words(category, 15, INK, bold=True))
+            headline.add_widget(info)
+            open_label = AnchorLayout(anchor_x="right", size_hint_x=None, width=dp(58))
+            open_label.add_widget(words("VIEW  ›", 12, PRIMARY, bold=True))
+            headline.add_widget(open_label)
+            card.add_widget(headline)
+
+            card.add_widget(words(str(item.get("title") or "Untitled request"), 20, INK, bold=True))
+            foot = BoxLayout(size_hint_y=None, height=dp(31), spacing=dp(7))
+            foot.add_widget(pill(status, 112, status_fill, status_ink, 28))
             date = readable_date(item.get("created_at"))
             if date:
-                info += f"  ·  {date}"
-            self.tickets.add_widget(Dashboard.ticket_row(
-                item["title"], info, item["status"], icon, fill, ink,
-                lambda _row, ticket_id=item["id"]: self.client.open_staff_detail(ticket_id),
-            ))
+                date_box = AnchorLayout(anchor_x="right")
+                date_box.add_widget(words(date, 12, MUTED))
+                foot.add_widget(date_box)
+            else:
+                foot.add_widget(Widget())
+            card.add_widget(foot)
+            self.tickets.add_widget(card)
 
 
 class StaffDetailScreen(ComplaintDetailScreen):
-    """Read assigned detail and offer only the next permitted status change."""
+    """Put the next permitted staff action immediately after the progress line."""
     NEXT = {"Open": "In Progress", "In Progress": "Resolved", "Reopened": "In Progress"}
+    ACTION_LABELS = {
+        "In Progress": "Start working on this",
+        "Resolved": "Mark this issue resolved",
+    }
 
     def __init__(self, client, **kwargs):
         self.client = client
         self.status_button = None
         self.status_feedback = None
         self.next_status = None
-        super().__init__(client.back_to_staff_queue, client.open_staff_detail, client=client, **kwargs)
+        super().__init__(client.back_to_staff_queue, client.open_staff_detail,
+                         client=client, **kwargs)
 
     def clear(self):
         super().clear()
@@ -1431,22 +1847,36 @@ class StaffDetailScreen(ComplaintDetailScreen):
         status = complaint.get("status")
         next_status = self.NEXT.get(status)
         self.next_status = next_status
-        panel = column(12)
-        panel.padding = (dp(17), dp(17))
-        paint(panel, WHITE, radius=20, stroke=LINE)
-        panel.add_widget(words("Update status", 19, bold=True))
+        panel = column(11)
+        panel.padding = (dp(19), dp(18))
+        paint(panel, ACCENT if next_status else WHITE, radius=20,
+              stroke=None if next_status else LINE)
+        panel.add_widget(words("YOUR NEXT ACTION", 11, PRIMARY, bold=True))
         if next_status is None:
-            panel.add_widget(words("This ticket is resolved. No further staff transition is available.", 14, MUTED))
+            panel.add_widget(words("This request is resolved.", 21, INK, bold=True))
+            panel.add_widget(words(
+                "Only an accepted reopen request can return a resolved ticket to work.",
+                14, MUTED,
+            ))
         else:
-            panel.add_widget(words(f"Current: {status}   →   Next: {next_status}", 14, MUTED))
+            step = "Resume work" if status == "Reopened" else self.ACTION_LABELS[next_status]
+            panel.add_widget(words(step, 22, INK, bold=True))
+            panel.add_widget(words(f"{status}  →  {next_status}", 14, PRIMARY))
             self.status_button = action(
-                f"Move to {next_status}", self.request_status_update,
-                fill=PRIMARY, ink=WHITE, height=52,
+                f"{step}  →", self.request_status_update,
+                fill=PRIMARY, ink=WHITE, height=54,
             )
             panel.add_widget(self.status_button)
-            self.status_feedback = words("Only your assigned tickets can be updated.", 13, MUTED)
+            self.status_feedback = words(
+                "Updates are saved to Status History and notify the student.",
+                12, "#446653",
+            )
             panel.add_widget(self.status_feedback)
-        self.content.add_widget(panel)
+
+        # Existing detail contains header, title and visual progress as its first
+        # three widgets. Place this action straight after them, before comments.
+        insert_position = max(0, len(self.content.children) - 3)
+        self.content.add_widget(panel, index=insert_position)
 
     def request_status_update(self, _button):
         if self.ticket_id is None or self.next_status is None or self.status_button is None:
@@ -1480,138 +1910,155 @@ class AdminDashboard(Screen):
         self.category_ids = {}
         self.page_number = 1
         self._suppress_filters = False
-        self.scroller, body = page(self, 1000)
+        self.scroller, body = page(self, 1050)
         body.add_widget(brand(client.sign_out))
 
-        hero = column(9)
-        hero.padding = (dp(24), dp(24))
-        paint(hero, HERO, radius=24)
-        hero.add_widget(words("ADMIN WORKSPACE", 12, "#C8C3FF", bold=True))
-        hero.add_widget(words("Campus overview", 30, WHITE, bold=True))
-        hero.add_widget(words(
-            "See campus-wide activity, find unresolved issues, and assign staff.",
-            15, "#D9DCF7",
-        ))
+        # Dispatch is the Admin's primary task; keep this heading short on phones.
+        hero = column(12)
+        hero.padding = (dp(23), dp(22))
+        paint(hero, HERO, radius=23)
+        heading = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(12))
+        mark = AnchorLayout(size_hint_x=None, width=dp(44))
+        mark.add_widget(FixlineGlyph("route", color=ACCENT,
+                                      size_hint=(None, None), size=(dp(39), dp(39))))
+        heading.add_widget(mark)
+        name = column(3)
+        name.add_widget(words("ADMIN  /  DISPATCH DESK", 12, ACCENT, bold=True))
+        name.add_widget(words("Keep the campus moving.", 22, WHITE, bold=True))
+        heading.add_widget(name)
+        hero.add_widget(heading)
+        hero.add_widget(words("Find requests without an owner, then send each fix to the right staff member.",
+                              14, "#D7E8DD"))
         body.add_widget(hero)
-        body.add_widget(action(
-            "Review reopen requests", client.open_reopen_review,
-            fill=WHITE, ink=PRIMARY, height=48,
+
+        # The first actionable panel is grounded in the 20 currently fetched rows.
+        attention = column(9)
+        attention.padding = (dp(16), dp(16))
+        paint(attention, "#E8F3DB", radius=18)
+        quick_head = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(12))
+        icon = AnchorLayout(size_hint_x=None, width=dp(44))
+        glyph_panel = AnchorLayout(size_hint=(None, None), size=(dp(43), dp(43)))
+        paint(glyph_panel, ACCENT, radius=13)
+        glyph_panel.add_widget(FixlineGlyph("route", size_hint=(None, None),
+                                            size=(dp(26), dp(26)), color=PRIMARY))
+        icon.add_widget(glyph_panel)
+        quick_head.add_widget(icon)
+        summary = column(3)
+        summary.add_widget(words("READY FOR DISPATCH", 11, "#46644F", bold=True))
+        self.unassigned_label = words("Loading requests...", 17, INK, bold=True)
+        summary.add_widget(self.unassigned_label)
+        quick_head.add_widget(summary)
+        attention.add_widget(quick_head)
+        attention.add_widget(words(
+            "Unassigned tickets from the current results page appear first below.",
+            12, "#50685A",
         ))
+        body.add_widget(attention)
 
-        # Values below are from /api/stats/basic (all complaints, not a single page).
-        section = column(6)
-        section.add_widget(words("Campus-wide statistics", 20, INK, bold=True))
-        self.stats_feedback = words("Loading statistics...", 13, MUTED)
-        section.add_widget(self.stats_feedback)
-        body.add_widget(section)
+        # Live statistics are campus-wide (GET /api/stats/basic).
+        summary_title = column(5)
+        summary_title.add_widget(words("Campus at a glance", 21, INK, bold=True))
+        self.stats_feedback = words("Loading live campus totals...", 12, MUTED)
+        summary_title.add_widget(self.stats_feedback)
+        body.add_widget(summary_title)
 
-        self.stats_grid = GridLayout(
-            cols=2, spacing=dp(10), size_hint_y=None, row_default_height=dp(110),
-            row_force_default=True,
-        )
+        self.stats_grid = GridLayout(cols=2, spacing=dp(10), size_hint_y=None,
+                                     row_default_height=dp(94), row_force_default=True)
         self.stats_values = {}
-        stats_specs = (
-            ("Total complaints", "total", "#ECE9FE", PRIMARY),
-            ("Unresolved", "unresolved", "#F9ECD1", "#735018"),
-            ("Open", "Open", "#EDF1F7", "#38506B"),
-            ("In progress", "In Progress", "#F9ECD1", "#735018"),
-            ("Resolved", "Resolved", "#E0F2E7", "#1C6243"),
-            ("Reopened", "Reopened", "#F2E9F9", "#6A3888"),
+        stat_specs = (
+            ("All requests", "total", "#FFFFFF", PRIMARY),
+            ("Unresolved", "unresolved", "#FFF1CE", "#72501C"),
+            ("Older than 7 days", "overdue", "#E0EFE8", "#205840"),
         )
-        for title, key, bg, shade in stats_specs:
-            card = column(6)
-            card.padding = (dp(15), dp(12))
-            paint(card, WHITE, radius=14, stroke=LINE)
-            card.height = dp(110)
-            card.size_hint_y = None
-            card.add_widget(words(title, 13, MUTED, bold=True))
-            value_label = words("—", 27, shade, bold=True)
-            card.add_widget(value_label)
-            self.stats_grid.add_widget(card)
-            self.stats_values[key] = value_label
+        for label, key, bg, tint in stat_specs:
+            metric = column(5)
+            metric.padding = (dp(15), dp(12))
+            metric.height = dp(94)
+            metric.size_hint_y = None
+            paint(metric, bg, radius=16, stroke=LINE)
+            metric.add_widget(words(label, 12, MUTED, bold=True))
+            value = words("—", 26, tint, bold=True)
+            metric.add_widget(value)
+            self.stats_grid.add_widget(metric)
+            self.stats_values[key] = value
         body.add_widget(self.stats_grid)
 
-        def resize_cards(_widget, width):
-            cols = 3 if width >= dp(680) else 2
+        def resize_metrics(_widget, width):
+            cols = 3 if width >= dp(610) else 2
             self.stats_grid.cols = cols
-            self.stats_grid.height = dp(((len(stats_specs) + cols - 1) // cols) * 110 +
-                                        ((len(stats_specs) + cols - 1) // cols - 1) * 10)
+            rows = (len(stat_specs) + cols - 1) // cols
+            self.stats_grid.height = dp(rows * 94 + (rows - 1) * 10)
 
-        self.stats_grid.bind(width=resize_cards)
-        # Set initial height even before the first layout pass.
-        resize_cards(None, 0)
+        self.stats_grid.bind(width=resize_metrics)
+        resize_metrics(None, 0)
 
-        older = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(10))
-        self.overdue_label = words("Unresolved over 7 days: —", 14, MUTED, bold=True)
-        older.add_widget(self.overdue_label)
-        older.add_widget(action(
-            "View overdue", lambda _btn: self.show_overdue(),
-            fill=WHITE, ink=PRIMARY, width=140, height=46,
-        ))
-        body.add_widget(older)
-        self.category_summary = words("By category: loading...", 13, MUTED)
+        self.overdue_label = words("Unresolved over 7 days: —", 13, MUTED, bold=True)
+        self.status_summary = words("Status breakdown: loading...", 13, MUTED)
+        self.category_summary = words("Category breakdown: loading...", 13, MUTED)
+        body.add_widget(self.status_summary)
         body.add_widget(self.category_summary)
+
+        shortcuts = GridLayout(cols=2, spacing=dp(9), size_hint_y=None,
+                               row_default_height=dp(49), row_force_default=True,
+                               height=dp(49))
+        shortcuts.add_widget(action("View overdue", lambda _btn: self.show_overdue(),
+                                    fill=WHITE, ink=PRIMARY, height=49))
+        shortcuts.add_widget(action("Review reopen requests", client.open_reopen_review,
+                                    fill=WHITE, ink=PRIMARY, height=49))
+        body.add_widget(shortcuts)
 
         self.notice = words("", 14, "#1C6243", bold=True)
         body.add_widget(self.notice)
-        body.add_widget(words("All complaints", 20, INK, bold=True))
-        body.add_widget(words(
-            "Combine category, status and age filters. Results are filtered by the server.",
+        filter_heading = column(5)
+        filter_heading.add_widget(words("Find a request", 21, INK, bold=True))
+        filter_heading.add_widget(words(
+            "Filter by category, progress or age. Select a ticket to assign staff.",
             13, MUTED,
         ))
-
-        controls = GridLayout(
-            cols=2, spacing=dp(8), size_hint_y=None,
-            row_default_height=dp(46), row_force_default=True,
-        )
+        body.add_widget(filter_heading)
+        controls = GridLayout(cols=2, spacing=dp(9), size_hint_y=None,
+                              row_default_height=dp(48), row_force_default=True)
         self.category_filter = self.make_spinner(self.ALL_CATEGORY, (self.ALL_CATEGORY,))
         self.status_filter = self.make_spinner(self.STATUSES[0], self.STATUSES)
         self.age_filter = self.make_spinner(self.AGE_ALL, (self.AGE_ALL, self.AGE_OVERDUE))
         controls.add_widget(self.category_filter)
         controls.add_widget(self.status_filter)
         controls.add_widget(self.age_filter)
-        controls.add_widget(action("Clear filters", self.clear_filters, fill=WHITE, ink=PRIMARY, height=46))
+        controls.add_widget(action("Clear filters", self.clear_filters,
+                                   fill=WHITE, ink=PRIMARY, height=48))
 
         def resize_filters(_widget, width):
-            cols = 4 if width >= dp(700) else 2
+            cols = 4 if width >= dp(760) else 2
             controls.cols = cols
-            controls.height = dp(46 if cols == 4 else 100)
-
+            controls.height = dp(48 if cols == 4 else 105)
         controls.bind(width=resize_filters)
         resize_filters(None, 0)
         body.add_widget(controls)
         for field in (self.category_filter, self.status_filter, self.age_filter):
             field.bind(text=self.filters_changed)
 
-        summary = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
+        listbar = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(8))
         self.count = words("", 13, MUTED)
-        summary.add_widget(self.count)
-        summary.add_widget(action(
-            "Refresh", lambda _btn: client.refresh_admin(),
-            fill=WHITE, ink=PRIMARY, width=92, height=44,
-        ))
-        body.add_widget(summary)
-        self.tickets = column()
-        self.tickets.padding = (dp(13), dp(3))
-        paint(self.tickets, WHITE, radius=18, stroke=LINE)
+        listbar.add_widget(self.count)
+        listbar.add_widget(action("Refresh", lambda _btn: client.refresh_admin(),
+                                   fill=WHITE, ink=PRIMARY, width=94, height=44))
+        body.add_widget(listbar)
+
+        self.tickets = column(12)
         body.add_widget(self.tickets)
 
-        pager = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(10))
-        self.prev = action(
-            "Previous", lambda _btn: client.load_admin_complaints(self.page_number - 1),
-            fill=WHITE, ink=PRIMARY, width=110, height=44,
-        )
+        pager = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(10))
+        self.prev = action("Previous", lambda _btn: client.load_admin_complaints(self.page_number - 1),
+                           fill=WHITE, ink=PRIMARY, width=110, height=46)
         self.page_label = Label(text="Page 1", font_size=sp(14), color=color(MUTED))
-        self.next = action(
-            "Next", lambda _btn: client.load_admin_complaints(self.page_number + 1),
-            fill=WHITE, ink=PRIMARY, width=90, height=44,
-        )
+        self.next = action("Next", lambda _btn: client.load_admin_complaints(self.page_number + 1),
+                           fill=WHITE, ink=PRIMARY, width=90, height=46)
         pager.add_widget(self.prev)
         pager.add_widget(self.page_label)
         pager.add_widget(self.next)
         body.add_widget(pager)
         body.add_widget(words(
-            "Up to 20 results per page. Statistics above cover the entire campus.",
+            "Up to 20 tickets per page. Only the statistics above represent the whole campus.",
             12, MUTED,
         ))
         self.show_message("Sign in as Admin to see campus requests.")
@@ -1628,15 +2075,22 @@ class AdminDashboard(Screen):
         return widget
 
     def set_stats(self, stats):
-        by_status = stats.get("by_status", {})
-        for key, field in self.stats_values.items():
-            value = stats.get(key, 0) if key in ("total", "unresolved") else by_status.get(key, 0)
-            field.text = str(value)
+        self.stats_values["total"].text = str(stats.get("total", 0))
+        self.stats_values["unresolved"].text = str(stats.get("unresolved", 0))
         overdue = stats.get("unresolved_over_7_days", 0)
+        self.stats_values["overdue"].text = str(overdue)
         self.overdue_label.text = f"Unresolved over 7 days: {overdue}"
-        parts = [f"{item['name']}: {item['count']}" for item in stats.get("by_category", [])]
-        self.category_summary.text = "By category  ·  " + ("    ·    ".join(parts) if parts else "No categories")
-        self.stats_feedback.text = "Live totals from PostgreSQL"
+        status = stats.get("by_status", {})
+        parts = [f"{name}: {status.get(name, 0)}" for name in
+                 ("Open", "In Progress", "Resolved", "Reopened")]
+        self.status_summary.text = "Progress  ·  " + "  |  ".join(parts)
+        categories = [f"{item['name']}: {item['count']}" for item in
+                      stats.get("by_category", [])]
+        self.category_summary.text = (
+            "By issue  ·  " + "  |  ".join(categories) if categories
+            else "By issue  ·  No categories"
+        )
+        self.stats_feedback.text = "Live campus totals from PostgreSQL"
         self.stats_feedback.color = color(MUTED)
 
     def stats_error(self):
@@ -1705,18 +2159,20 @@ class AdminDashboard(Screen):
         self._suppress_filters = False
         self.count.text = ""
         self.notice.text = ""
+        self.unassigned_label.text = "Loading requests..."
         for field in self.stats_values.values():
             field.text = "—"
         self.overdue_label.text = "Unresolved over 7 days: —"
-        self.category_summary.text = "By category: loading..."
-        self.stats_feedback.text = "Loading statistics..."
+        self.status_summary.text = "Status breakdown: loading..."
+        self.category_summary.text = "Category breakdown: loading..."
+        self.stats_feedback.text = "Loading campus totals..."
         self.stats_feedback.color = color(MUTED)
         self.show_message("Sign in as Admin to see campus requests.")
         self.update_pager()
 
     def show_message(self, message):
         self.tickets.clear_widgets()
-        self.tickets.add_widget(words(message, 14, MUTED, min_height=68))
+        self.tickets.add_widget(status_panel(message, "route"))
 
     def set_staff(self, staff):
         self.staff = list(staff)
@@ -1729,29 +2185,84 @@ class AdminDashboard(Screen):
         self.update_pager()
 
     def render_rows(self):
-        self.count.text = f"{len(self.rows)} result(s) on page {self.page_number}"
+        self.count.text = f"{len(self.rows)} ticket(s) on page {self.page_number}"
         self.tickets.clear_widgets()
+        unassigned = [record for record in self.rows if record.get("assigned_to") is None]
+        others = [record for record in self.rows if record.get("assigned_to") is not None]
+        self.unassigned_label.text = (
+            f"{len(unassigned)} waiting for an owner on this page" if self.rows
+            else "No tickets on this page"
+        )
         if not self.rows:
             self.show_message("No complaints match these filters." if self.page_number == 1
                               else "No more results. Use Previous to go back.")
             self.update_pager()
             return
+
         staff_names = {u["id"]: u["name"] for u in self.staff}
-        for i, item in enumerate(self.rows):
-            if i:
-                divider = Widget(size_hint_y=None, height=dp(1))
-                paint(divider, LINE, radius=0)
-                self.tickets.add_widget(divider)
-            category = item["category_name"]
-            icon, fill, ink = CATEGORY_ICONS.get(category, ("campus", PALE, PRIMARY))
-            staff_id = item.get("assigned_to")
-            assigned = (staff_names.get(staff_id, f"Staff #{staff_id}") if staff_id is not None
-                        else "Unassigned")
-            subtitle = f"#{item['id']}  ·  {category}  ·  {assigned}"
-            self.tickets.add_widget(Dashboard.ticket_row(
-                item["title"], subtitle, item["status"], icon, fill, ink,
-                lambda _row, selected=dict(item): self.client.open_admin_assign(selected),
-            ))
+        palette = {name: (glyph, shade) for name, glyph, _hint, shade in FIXLINE_CATEGORIES}
+
+        def group(label, caption, tickets):
+            if not tickets:
+                return
+            title = column(3)
+            title.add_widget(words(label, 17, INK, bold=True))
+            title.add_widget(words(caption, 12, MUTED))
+            self.tickets.add_widget(title)
+            for item in tickets:
+                category = str(item.get("category_name") or "Other")
+                glyph, tile_fill = palette.get(category, ("other", NEUTRAL))
+                status = str(item.get("status") or "Open")
+                fill, tint = STATUS_COLORS.get(status, (NEUTRAL, MUTED))
+                owner_id = item.get("assigned_to")
+                owner_name = staff_names.get(owner_id, f"Staff #{owner_id}") if owner_id is not None else "Needs assignment"
+                card = TicketRow(
+                    orientation="vertical", size_hint_y=None,
+                    padding=(dp(15), dp(14)), spacing=dp(9),
+                )
+                card.bind(minimum_height=card.setter("height"))
+                card_fill = "#FFFFFF" if owner_id is not None else "#FFFDF5"
+                shade = paint(card, card_fill, radius=18, stroke="#E8E5D6" if owner_id is None else LINE)
+                card.bind(
+                    state=lambda _w, state, sh=shade, base=card_fill: setattr(
+                        sh, "rgba", color(PALE if state == "down" else base)
+                    ),
+                    on_release=lambda _w, selected=dict(item): self.client.open_admin_assign(selected),
+                )
+
+                heading = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(10))
+                icon_bg = AnchorLayout(size_hint_x=None, width=dp(44))
+                icon_frame = AnchorLayout(size_hint=(None, None), size=(dp(43), dp(43)))
+                paint(icon_frame, tile_fill, radius=12)
+                icon_frame.add_widget(FixlineGlyph(
+                    glyph, color=INK, size_hint=(None, None), size=(dp(27), dp(27))
+                ))
+                icon_bg.add_widget(icon_frame)
+                heading.add_widget(icon_bg)
+                meta = column(3)
+                meta.add_widget(words(f"REQUEST #{item['id']}", 11, MUTED, bold=True))
+                meta.add_widget(words(category, 15, INK, bold=True))
+                heading.add_widget(meta)
+                # A persistent direction label makes the whole card's action clear.
+                hint = AnchorLayout(anchor_x="right", size_hint_x=None, width=dp(90))
+                hint.add_widget(words(
+                    "ASSIGN  ›" if owner_id is None else "REASSIGN  ›",
+                    12, PRIMARY, bold=True,
+                ))
+                heading.add_widget(hint)
+                card.add_widget(heading)
+                card.add_widget(words(str(item.get("title") or "Untitled request"),
+                                      18, INK, bold=True))
+                footer = BoxLayout(size_hint_y=None, height=dp(31), spacing=dp(9))
+                footer.add_widget(pill(status, 112, fill, tint, 28))
+                owner = words(owner_name, 12, "#925E21" if owner_id is None else MUTED)
+                footer.add_widget(owner)
+                card.add_widget(footer)
+                self.tickets.add_widget(card)
+
+        group("Needs an owner", "Unassigned requests from this results page.", unassigned)
+        group("Already in motion", "Assigned requests you can reassign if needed.", others)
+
 
 
 class AdminAssignScreen(Screen):
@@ -1764,25 +2275,32 @@ class AdminAssignScreen(Screen):
         self.record = None
         self.staff_ids = {}
         self.busy = False
-        self.scroller, body = page(self, 720)
-        body.add_widget(action(
-            "Back to all complaints", client.back_to_admin_dashboard,
-            fill=WHITE, ink=PRIMARY, width=202, height=44,
-        ))
+        self.scroller, body = page(self, 740)
+        body.add_widget(brand(client.sign_out))
+        body.add_widget(action("‹  Back to dispatch", client.back_to_admin_dashboard,
+                               fill=WHITE, ink=PRIMARY, width=210, height=44))
+        hero = column(8)
+        hero.padding = (dp(22), dp(19))
+        paint(hero, HERO, radius=20)
+        hero.add_widget(words("DISPATCH A FIX", 12, ACCENT, bold=True))
+        hero.add_widget(words("Choose who's on it.", 24, WHITE, bold=True))
+        hero.add_widget(words("One request, one clear owner. You can reassign when needed.",
+                              13, "#D7E8DD"))
+        body.add_widget(hero)
         self.content = column(12)
         body.add_widget(self.content)
-        self.form = column(15)
-        self.form.padding = (dp(20), dp(20))
-        paint(self.form, WHITE, radius=20, stroke=LINE)
+        self.form = column(13)
+        self.form.padding = (dp(19), dp(19))
+        paint(self.form, WHITE, radius=18, stroke=LINE)
         self.content.add_widget(self.form)
         self.staff_spinner = Spinner(
             text=self.PLACEHOLDER, values=[], option_cls=CategoryOption,
-            color=color(INK), font_size=sp(14), size_hint_y=None, height=dp(50),
+            color=color(INK), font_size=sp(14), size_hint_y=None, height=dp(52),
             background_normal="", background_down="", background_color=(0, 0, 0, 0),
         )
         paint(self.staff_spinner, BG, radius=11, stroke=LINE)
-        self.save = action("Confirm assignment", self.assign, height=52)
-        self.feedback = words("", 14, MUTED)
+        self.save = action("Confirm assignment", self.assign, height=54)
+        self.feedback = words("", 13, MUTED)
         self.show_record(None, [])
 
     def clear(self):
@@ -1801,19 +2319,43 @@ class AdminAssignScreen(Screen):
         self.staff_spinner.disabled = not self.staff_ids
         self.save.disabled = not self.staff_ids
         if record is None:
-            self.form.add_widget(words("Choose a complaint from the Admin dashboard.", 16, MUTED))
+            self.form.add_widget(words("Select a request from the dispatch desk.", 15, MUTED))
             return
-        self.form.add_widget(words(f"COMPLAINT #{record['id']}", 12, PRIMARY, bold=True))
-        self.form.add_widget(words(record["title"], 25, bold=True))
-        self.form.add_widget(words(
-            f"{record['category_name']}  ·  {record['status']}", 14, MUTED
-        ))
+        category = str(record.get("category_name") or "Other")
+        palette = {name: (glyph, bg) for name, glyph, _subtitle, bg in FIXLINE_CATEGORIES}
+        glyph, bg = palette.get(category, ("other", PALE))
+        header = BoxLayout(size_hint_y=None, height=dp(53), spacing=dp(12))
+        mark = AnchorLayout(size_hint_x=None, width=dp(53))
+        icon_bg = AnchorLayout(size_hint=(None, None), size=(dp(51), dp(51)))
+        paint(icon_bg, bg, radius=13)
+        icon_bg.add_widget(FixlineGlyph(
+            glyph, color=INK, size_hint=(None, None), size=(dp(31), dp(31))))
+        mark.add_widget(icon_bg)
+        header.add_widget(mark)
+        description = column(3)
+        description.add_widget(words(f"REQUEST #{record['id']}", 11, MUTED, bold=True))
+        description.add_widget(words(category, 17, INK, bold=True))
+        header.add_widget(description)
+        self.form.add_widget(header)
+        self.form.add_widget(words(str(record.get("title") or "Untitled request"),
+                                   22, INK, bold=True))
+        status = str(record.get("status") or "Open")
+        fill, tint = STATUS_COLORS.get(status, (NEUTRAL, MUTED))
+        badge_row = BoxLayout(size_hint_y=None, height=dp(31))
+        badge_row.add_widget(pill(status, 112, fill, tint, 28))
+        badge_row.add_widget(Widget())
+        self.form.add_widget(badge_row)
         current = record.get("assigned_to")
         current_name = next((user["name"] for user in staff if user["id"] == current), None)
         owner = (f"{current_name} (#{current})" if current_name else
-                 f"Staff #{current}" if current is not None else "Unassigned")
-        self.form.add_widget(words(f"Current assignee: {owner}", 14, MUTED))
-        self.form.add_widget(words("Assign to", 15, bold=True))
+                 f"Staff #{current}" if current is not None else "Nobody yet — needs assignment")
+        self.form.add_widget(words("CURRENT OWNER", 12, MUTED, bold=True))
+        self.form.add_widget(words(owner, 15, INK))
+        separator = Widget(size_hint_y=None, height=dp(1))
+        paint(separator, LINE, radius=0)
+        self.form.add_widget(separator)
+        self.form.add_widget(words("Assign to staff", 17, INK, bold=True))
+        self.form.add_widget(words("Select the person responsible for this request.", 13, MUTED))
         self.form.add_widget(self.staff_spinner)
         self.form.add_widget(self.save)
         self.feedback = words("", 13, MUTED)
@@ -1866,9 +2408,9 @@ class ReopenReviewScreen(Screen):
         hero = column(8)
         hero.padding = (dp(22), dp(22))
         paint(hero, HERO, radius=22)
-        hero.add_widget(words("STAFF / ADMIN", 11, "#C8C3FF", bold=True))
+        hero.add_widget(words("REVIEW WORKSPACE", 11, ACCENT, bold=True))
         hero.add_widget(words("Reopen requests", 29, WHITE, bold=True))
-        hero.add_widget(words("Review reasons before accepting or declining.", 14, "#D9DCF7"))
+        hero.add_widget(words("Read each reason before accepting or declining.", 14, "#D7E8DD"))
         body.add_widget(hero)
 
         toolbar = BoxLayout(size_hint_y=None, height=dp(46))
@@ -1888,13 +2430,15 @@ class ReopenReviewScreen(Screen):
 
     def show_message(self, message):
         self.feed.clear_widgets()
-        self.feed.add_widget(words(message, 14, MUTED, min_height=58))
+        self.feed.add_widget(status_panel(message, "route"))
 
     def show_requests(self, records):
         self.feed.clear_widgets()
         self.summary.text = f"{len(records)} pending"
         if not records:
-            self.feed.add_widget(words("No pending reopen requests right now.", 15, MUTED))
+            self.feed.add_widget(status_panel(
+                "No pending reopen requests. New requests will appear here for review.", "check"
+            ))
             return
         for record in records:
             card = column(12)
@@ -2620,10 +3164,11 @@ class CampusFixApp(App):
         self.call("PUT", f"/api/reopen/{request_id}", 200, finish,
                   body={"decision": decision}, protected=True)
 
-    def open_form(self, _button):
+    def open_form(self, _button, category_name=None):
         if not self.token or not self.user or self.user.get("role") != "Student":
             return
         self.dashboard.show_notice("")
+        self.form.prefill_category(category_name)
         self.navigate("new_complaint", "left")
 
     def open_dashboard(self, _button):
