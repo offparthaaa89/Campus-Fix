@@ -1,0 +1,39 @@
+# Secrets and environment variables
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Operating system
+.DS_Store
+
+# IDE
+.vscode/
+.cursor/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Downloaded archives
+*.zip
+
+# Backups
+*.bak
+*.before_*.py
