@@ -27,13 +27,20 @@ BEARER = HTTPBearer(auto_error=False)
 PUBLIC_COLUMNS = (User.id, User.name, User.email, User.role)
 
 
-class LoginInput(BaseModel):
+class CredentialsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
     password: Annotated[SecretStr, Field(min_length=8, max_length=128)]
 
 
-class RegisterInput(LoginInput):
+class LoginInput(CredentialsInput):
+    # Optional so legacy API clients continue to work. CampusFix's new login
+    # UI always sends the selected role; a mismatch will fail server-side.
+    role: Literal["Student", "Staff", "Admin"] | None = None
+
+
+class RegisterInput(CredentialsInput):
+    # Public registration always creates a Student, never Staff/Admin.
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
@@ -131,6 +138,9 @@ class AuthRoutes:
             raise unauthorized("Invalid email or password.")
 
         user = PublicUser.model_validate(row)
+        if body.role is not None and user.role != body.role:
+            raise unauthorized("Credentials are not valid for the selected workspace.")
+
         now = datetime.now(timezone.utc)
         token = jwt.encode(
             {

@@ -1005,16 +1005,80 @@ class NotificationsScreen(Screen):
 
 
 class LoginScreen(Screen):
+    """One login, with an explicit workspace selector at the top right.
+
+    The client sends the chosen role to FastAPI. A role mismatch is rejected
+    before a token is issued, and the returned authenticated role is checked
+    again before opening a workspace.
+    """
+
+    ROLES = ("Student", "Staff", "Admin")
+    ROLE_HELP = {
+        "Student": "Report problems, follow progress, and talk to support.",
+        "Staff": "See your assigned work and keep students informed.",
+        "Admin": "Dispatch issues, manage requests, and view campus progress.",
+    }
+
     def __init__(self, client, **kwargs):
         super().__init__(**kwargs)
         self.client = client
         self.busy = False
+        self.selected_role = "Student"
         _, body = page(self, 480)
-        body.add_widget(brand())
-        intro = column(5)
+
+        # Compact locked CampusFix identity + selected workspace in one bar.
+        header = BoxLayout(size_hint_y=None, height=dp(55), spacing=dp(8))
+        logo = AnchorLayout(size_hint_x=None, width=dp(44))
+        logo.add_widget(FixlineBrandMark(
+            size_hint=(None, None), size=(dp(42), dp(42))))
+        header.add_widget(logo)
+        brand_label = Label(
+            text="CampusFix", font_size=sp(22), bold=True,
+            color=color(INK), halign="left", valign="middle",
+            size_hint_x=1,
+        )
+        brand_label.bind(size=lambda label, _: setattr(label, "text_size", label.size))
+        header.add_widget(brand_label)
+        self.role_picker = Spinner(
+            text="Student", values=self.ROLES, option_cls=CategoryOption,
+            size_hint=(None, None), width=dp(128), height=dp(42),
+            font_size=sp(14), bold=True, color=color(PRIMARY),
+            background_normal="", background_down="",
+            background_disabled_normal="", background_color=(0, 0, 0, 0),
+        )
+        paint(self.role_picker, PALE, radius=13, stroke=LINE)
+        with self.role_picker.canvas.after:
+            Color(*color(MUTED))
+            chevron = Line(points=[], width=dp(1.3))
+
+        def position_chevron(item, _value):
+            x, y = item.right - dp(15), item.center_y
+            chevron.points = (x - dp(4), y + dp(2), x, y - dp(2), x + dp(4), y + dp(2))
+
+        self.role_picker.bind(pos=position_chevron, size=position_chevron)
+        position_chevron(self.role_picker, None)
+        self.role_picker.bind(text=self.on_role_picked)
+        picker_slot = AnchorLayout(anchor_x="right", anchor_y="center",
+                                   size_hint_x=None, width=dp(128))
+        picker_slot.add_widget(self.role_picker)
+        header.add_widget(picker_slot)
+
+        def fit_header(_widget=None, _value=None):
+            compact = header.width < dp(370)
+            picker_slot.width = dp(108 if compact else 128)
+            self.role_picker.width = picker_slot.width
+            brand_label.font_size = sp(19 if compact else 22)
+
+        header.bind(width=fit_header)
+        body.add_widget(header)
+        Clock.schedule_once(lambda _dt: fit_header(), 0)
+
+        intro = column(7)
         intro.add_widget(words("ONE CAMPUS. ONE PLACE.", 12, PRIMARY, bold=True))
-        intro.add_widget(words("Sign in to CampusFix", 33, bold=True))
-        intro.add_widget(words("Students report issues. Staff resolve them. Use your own account to continue.", 15, MUTED))
+        self.headline = words("Sign in as Student", 30, INK, bold=True)
+        intro.add_widget(self.headline)
+        self.description = words(self.ROLE_HELP["Student"], 15, MUTED)
+        intro.add_widget(self.description)
         body.add_widget(intro)
 
         form = column(13)
@@ -1024,18 +1088,51 @@ class LoginScreen(Screen):
         self.password = input_field("Your account password", password=True)
         self.email.bind(on_text_validate=lambda _input: setattr(self.password, "focus", True))
         self.password.bind(on_text_validate=self.sign_in)
-        add_field(form, "Email", self.email)
+        add_field(form, "Email address", self.email)
         add_field(form, "Password", self.password)
-        self.sign_in_button = action("Sign in", self.sign_in, height=51)
+        self.sign_in_button = action("Sign in as Student", self.sign_in, height=51)
         self.feedback = words("", 13, MUTED)
         form.add_widget(self.sign_in_button)
         form.add_widget(self.feedback)
+
+        # A quiet registration link for students; not available for staff/admin.
+        self.footer = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4))
+        self.student_footer = BoxLayout(spacing=dp(5))
+        prompt = Label(text="New student?", font_size=sp(13), color=color(MUTED),
+                       size_hint_x=None, width=dp(100), halign="left", valign="middle")
+        prompt.bind(size=lambda label, _: setattr(label, "text_size", label.size))
+        self.student_footer.add_widget(prompt)
         self.create_account_button = action(
-            "Create a student account", self.client.open_registration,
-            fill=PALE, ink=PRIMARY, height=48,
+            "Create account", self.client.open_registration,
+            fill=WHITE, ink=PRIMARY, height=40,
         )
-        form.add_widget(self.create_account_button)
+        self.student_footer.add_widget(self.create_account_button)
+        self.staff_admin_note = words("", 13, MUTED, min_height=38)
+        self.footer.add_widget(self.student_footer)
+        form.add_widget(self.footer)
         body.add_widget(form)
+
+    def on_role_picked(self, _spinner, role):
+        self.select_role(role)
+
+    def select_role(self, role):
+        """Switch the requested workspace; never infer privileges from this UI."""
+        if self.busy or role not in self.ROLES:
+            return
+        self.selected_role = role
+        if self.role_picker.text != role:
+            self.role_picker.text = role
+        self.password.text = ""  # Prevent carrying a password into another workspace.
+        self.headline.text = f"Sign in as {role}"
+        self.description.text = self.ROLE_HELP[role]
+        self.sign_in_button.text = f"Sign in as {role}"
+        self.footer.clear_widgets()
+        if role == "Student":
+            self.footer.add_widget(self.student_footer)
+        else:
+            self.staff_admin_note.text = f"{role} accounts are provided by campus administration."
+            self.footer.add_widget(self.staff_admin_note)
+        self.show_message("")
 
     def show_message(self, text, *, error=False):
         self.feedback.color = color(ERROR if error else MUTED)
@@ -1045,7 +1142,8 @@ class LoginScreen(Screen):
         self.busy = value
         self.email.disabled = self.password.disabled = self.sign_in_button.disabled = value
         self.create_account_button.disabled = value
-        self.sign_in_button.text = "Signing in..." if value else "Sign in"
+        self.role_picker.disabled = value
+        self.sign_in_button.text = "Signing in..." if value else f"Sign in as {self.selected_role}"
 
     def sign_in(self, _widget):
         if self.busy:
@@ -1060,16 +1158,19 @@ class LoginScreen(Screen):
         self.show_message("")
         self.client.call(
             "POST", "/api/auth/login", 200, self.finish,
-            body={"email": email, "password": password},
+            body={"email": email, "password": password, "role": self.selected_role},
         )
 
     def finish(self, data, error):
         self.set_busy(False)
         self.password.text = ""
         if error == 401:
-            self.show_message("That email or password did not match.", error=True)
+            self.show_message(
+                f"Wrong credentials or this account cannot sign in as {self.selected_role}.",
+                error=True,
+            )
         elif error == 422:
-            self.show_message("Check that the email and password are entered correctly.", error=True)
+            self.show_message("Check your details and ensure the backend has the updated login route.", error=True)
         elif error == "connection":
             self.show_message("Could not reach CampusFix. Check that the backend is running.", error=True)
         elif error is not None or not isinstance(data, dict):
@@ -1077,10 +1178,15 @@ class LoginScreen(Screen):
         else:
             user = data.get("user")
             token = data.get("access_token")
-            if not isinstance(user, dict) or not isinstance(token, str) or not token or not isinstance(user.get("id"), int):
+            if (not isinstance(user, dict) or not isinstance(token, str)
+                    or not token or not isinstance(user.get("id"), int)):
                 self.show_message("Could not read the sign-in response.", error=True)
-            elif user.get("role") not in ("Student", "Staff", "Admin"):
-                self.show_message("This account role is not supported.", error=True)
+            elif user.get("role") != self.selected_role:
+                # Defense in depth: even with an older server, reject a role mismatch.
+                self.show_message(
+                    f"This account cannot access the {self.selected_role} workspace.",
+                    error=True,
+                )
             else:
                 self.client.signed_in(token, user)
 
@@ -2580,6 +2686,7 @@ class CampusFixApp(App):
         self.navigate("login", "right")
 
     def registration_complete(self, email):
+        self.login.select_role("Student")
         self.login.email.text = email
         self.login.password.text = ""
         self.login.show_message("Account created! Sign in with your new password.")
