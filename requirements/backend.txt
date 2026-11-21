@@ -1,0 +1,11 @@
+# FastAPI + PostgreSQL backend. Not part of the Kivy mobile/desktop client.
+# Exact versions detected in the active Python environment.
+fastapi==0.165.0
+uvicorn==0.54.0
+SQLAlchemy==2.1.9
+psycopg==3.3.9
+PyJWT==2.15.1
+pwdlib[argon2]==0.4.2
+email-validator==2.4.0
+python-dotenv==1.2.4
+pydantic==2.14.4

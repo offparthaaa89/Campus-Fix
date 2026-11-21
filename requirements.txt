@@ -1,0 +1,6 @@
+# Local Mac development environment: backend + client + tests.
+# For Android/Windows client packaging, use requirements/client.txt only
+# and validate platform compatibility separately.
+-r requirements/backend.txt
+-r requirements/client.txt
+-r requirements/dev.txt

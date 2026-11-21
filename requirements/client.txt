@@ -1,0 +1,4 @@
+# Kivy UI client. API server is deployed/running separately.
+# Exact versions detected in the active Python environment.
+Kivy==2.3.2
+requests==2.34.2
