@@ -37,3 +37,13 @@ dist/
 # Backups
 *.bak
 *.before_*.py
+# Android build outputs
+.buildozer/
+android_staging/.buildozer/
+android_staging/bin/
+*.apk
+*.aab
+*.spec.backup
+
+# Keep Android Buildozer configuration
+!android_staging/buildozer.spec
