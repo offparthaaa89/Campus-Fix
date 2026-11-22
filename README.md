@@ -113,7 +113,7 @@ Android packaging sources and configuration are under `android_staging/`. Genera
 
 The current demonstration setup connects the Android client to a **separately running backend through Tailscale**. Installing the APK alone will not provide a working backend to a device without the required network access. For evaluating the prototype without that setup, use the screen-recorded demonstration.
 
-**Project files / prototype:** [CampusFix Google Drive folder](https://drive.google.com/drive/folders/17VUNkr4-eNSlDoxyvNdZlVF52NGmd8Y2?usp=drive_link) (access depends on folder-sharing settings).
+**Project files / prototype:** [CampusFix Google Drive folder](https://drive.google.com/drive/folders/17VUNkr4-eNSlDoxyvNdZlVF52NGmd8Y2?usp=drive_link) .
 
 ## Repository hygiene and security
 
